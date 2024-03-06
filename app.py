@@ -1,21 +1,19 @@
 from flask import Flask, request, jsonify
-
 import os
-
 import psycopg2
 from dotenv import load_dotenv
 
+# Load environment variables from .env file
 load_dotenv()
 
-
-from config import TABLE_NAME 
+from config import TABLE_NAME
 
 app = Flask(__name__)
 
 def connect_to_db():
-    """Connects to the PostgreSQL database and returns a connection object."""
+    """Establishes a connection to the PostgreSQL database."""
     try:
-        # Use environment variables for secure credential access
+        # Securely access database credentials from environment variables
         conn = psycopg2.connect(
             dbname=os.getenv("DB_NAME"),
             user=os.getenv("DB_USER"),
@@ -28,24 +26,24 @@ def connect_to_db():
         print(f"Error connecting to database: {e}")
         return None
 
-
 def filter_sort_paginate_data(filters, sort_by, sort_order, page, per_page):
     """
-    Fetches data from the database based on filters, sorting, and pagination.
+    Retrieves data from the database based on specified filters, sorting, and pagination.
     """
     conn = connect_to_db()
     if not conn:
         return {"message": "Error connecting to database"}, 500
 
     try:
-        # Build query with parameterization for security
         with conn.cursor() as cursor:
+            # Construct query for total count
             total_count_query = f"""
             SELECT COUNT(*) FROM {TABLE_NAME} {f"WHERE {' AND '.join(f'{key} = %s' for key in filters)}" if filters else ''};
             """
             cursor.execute(total_count_query, list(filters.values()) if filters else [])
             total_count = cursor.fetchone()[0]
 
+            # Construct query for data retrieval
             data_query = f"""
             SELECT * FROM {TABLE_NAME}
                 {f"WHERE {' AND '.join(f'{key} = %s' for key in filters)}" if filters else ''}
@@ -65,22 +63,20 @@ def filter_sort_paginate_data(filters, sort_by, sort_order, page, per_page):
 
 @app.route("/assignment/query", methods=["POST"])
 def query_data():
-    """Handles POST requests containing filtering, sorting, and pagination options."""
+    """Handles POST requests for data querying with filtering, sorting, and pagination."""
     try:
         data = request.get_json()
         filters = data.get("filters", {})
         sort_by = data.get("sort_by", "main_af_vcf")
         sort_order = data.get("sort_order", "desc")
-        page = int(data.get("page", 1))  # Ensure page is an integer
-        per_page = int(data.get("per_page", 10))  # Ensure per_page is an integer
+        page = int(data.get("page", 1)) # Ensure page is an integer
+        per_page = int(data.get("per_page", 10)) # Ensure per_page is an integer
 
-        # Validate data types before query execution
+        # Validate filters input
         if not isinstance(filters, dict):
             return jsonify({"message": "Invalid data types in request body."}), 400
 
-        # ... Add validation for other fields as needed (e.g., sort_by, sort_order)
-
-        # Call function to fetch and process data
+        # Execute data query with provided parameters
         response = filter_sort_paginate_data(filters, sort_by, sort_order, page, per_page)
         return jsonify(response)
 
